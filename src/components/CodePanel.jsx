@@ -1,12 +1,20 @@
 import { useState } from "react";
+import StylePrompt from "./StylePrompt";
 
-const TABS = ["jsx", "tailwind", "css"];
+const BASE_TABS = ["jsx", "tailwind", "css"];
 
-export default function CodePanel({ code, shape }) {
+export default function CodePanel({ code, shape, onStyleGenerate, styleLoading, styledCode, styleError, onStyleReset }) {
   const [tab, setTab] = useState("jsx");
+  const [viewMode, setViewMode] = useState("base"); // "base" | "ai"
   const [copied, setCopied] = useState(false);
 
-  const content = code?.[tab] ?? null;
+  const effectiveMode = styledCode ? viewMode : "base";
+
+  // In AI mode, show the AI version of the current tab
+  const content =
+    effectiveMode === "ai" && styledCode
+      ? styledCode[tab] ?? ""
+      : code?.[tab] ?? null;
 
   const handleCopy = () => {
     if (!content) return;
@@ -16,44 +24,111 @@ export default function CodePanel({ code, shape }) {
     });
   };
 
+  const handleStyleGenerate = (prompt) => {
+    setViewMode("ai");
+    onStyleGenerate(prompt);
+  };
+
+  const handleReset = () => {
+    setViewMode("base");
+    onStyleReset();
+  };
+
   return (
-    <div className="w-[360px] flex-shrink-0 flex flex-col border-l border-white/8 bg-[#13131a]">
+    <div className="w-[380px] flex-shrink-0 flex flex-col border-l border-white/8 bg-[#13131a]">
       {/* Header */}
       <div className="px-4 pt-4 pb-0">
         <div className="flex items-center justify-between mb-3">
           <span className="text-white/50 text-xs tracking-widest uppercase">
             Code Output
           </span>
-          {shape?.type && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-white/40 border border-white/10">
-              {shape.w}×{shape.h}px
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {shape?.type && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-white/40 border border-white/10">
+                {shape.w}×{shape.h}px
+              </span>
+            )}
+            {styledCode && (
+              <div className="flex bg-white/5 rounded-lg p-0.5 border border-white/10">
+                <button
+                  onClick={() => setViewMode("base")}
+                  className={`text-[10px] px-2 py-0.5 rounded-md transition-all ${
+                    effectiveMode === "base" ? "bg-white/10 text-white" : "text-white/30 hover:text-white/60"
+                  }`}
+                >
+                  Base
+                </button>
+                <button
+                  onClick={() => setViewMode("ai")}
+                  className={`text-[10px] px-2 py-0.5 rounded-md transition-all ${
+                    effectiveMode === "ai" ? "bg-violet-500/30 text-violet-300" : "text-white/30 hover:text-white/60"
+                  }`}
+                >
+                  ✦ AI
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1">
-          {TABS.map((t) => (
+        {/* Tabs — always visible, switch between base/AI content */}
+        <div className="flex items-center justify-between">
+          <div className="flex gap-1">
+            {BASE_TABS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`text-xs px-3 py-1.5 rounded-t-md transition-all font-mono ${
+                  tab === t
+                    ? "bg-[#1e1e2a] text-white border border-white/10 border-b-[#1e1e2a]"
+                    : "text-white/30 hover:text-white/60"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          {effectiveMode === "ai" && (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`text-xs px-3 py-1.5 rounded-t-md transition-all font-mono ${
-                tab === t
-                  ? "bg-[#1e1e2a] text-white border border-white/10 border-b-[#1e1e2a]"
-                  : "text-white/30 hover:text-white/60"
-              }`}
+              onClick={handleReset}
+              className="text-[10px] text-white/20 hover:text-white/50 transition-colors pb-1"
             >
-              {t}
+              ✕ Reset
             </button>
-          ))}
+          )}
         </div>
       </div>
 
       {/* Code area */}
-      <div className="flex-1 bg-[#1e1e2a] border border-white/8 mx-4 rounded-b-xl rounded-tr-xl overflow-hidden flex flex-col min-h-0">
-        {content ? (
+      <div className={`flex-1 border border-white/8 mx-4 rounded-b-xl rounded-tr-xl overflow-hidden flex flex-col min-h-0 ${
+        effectiveMode === "ai" ? "bg-[#1a1a2e]" : "bg-[#1e1e2a]"
+      }`}>
+        {styleLoading ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-violet-400/60">
+            <svg className="animate-spin w-6 h-6" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.2"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            <span className="text-xs">Generating style...</span>
+          </div>
+        ) : styleError ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <div className="text-2xl">⚠️</div>
+            <p className="text-xs text-red-400/80">{styleError}</p>
+            <button onClick={handleReset} className="text-[10px] text-white/30 hover:text-white/60">
+              Go back
+            </button>
+          </div>
+        ) : content ? (
           <>
-            <pre className="flex-1 overflow-auto p-4 text-xs leading-relaxed text-emerald-300 font-mono whitespace-pre-wrap">
+            {effectiveMode === "ai" && (
+              <div className="px-4 pt-3 pb-1">
+                <span className="text-[10px] text-violet-400/60">✦ AI styled · {tab}</span>
+              </div>
+            )}
+            <pre className={`flex-1 overflow-auto p-4 text-xs leading-relaxed font-mono whitespace-pre-wrap ${
+              effectiveMode === "ai" ? "text-violet-300" : "text-emerald-300"
+            }`}>
               {content}
             </pre>
             <div className="border-t border-white/8 p-3">
@@ -77,12 +152,11 @@ export default function CodePanel({ code, shape }) {
         )}
       </div>
 
-      {/* Tips */}
-      <div className="p-4 space-y-1.5 text-[10px] text-white/20">
-        <p>• Drag on canvas to draw a shape</p>
-        <p>• Drag corners to resize</p>
-        <p>• Click to select · Delete key removes</p>
-      </div>
+      <StylePrompt
+        onGenerate={handleStyleGenerate}
+        loading={styleLoading}
+        disabled={!shape?.type}
+      />
     </div>
   );
 }
